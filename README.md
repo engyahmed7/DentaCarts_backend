@@ -94,4 +94,3 @@ Choose the method that best suits your environment and preferences to get the Sc
 ## Contributors
 
 Feel free to contribute to this project by submitting pull requests or opening issues for any bugs or feature requests.
-# DentaCarts_backend
