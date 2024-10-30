@@ -10,10 +10,11 @@ const requireAuth = (req, res, next) => {
   }
 
   const token = authHeader.split(" ")[1];
+  console.log(token);
   if (token) {
     jwt.verify(token, process.env.JWT_KEY, (err, decodedToken) => {
       if (err || decodedToken.verified == false) {
-        return res.status(403).json({ Status: 403, msg: "Not Authorized" });
+        return res.status(403).json({ Status: 403, msg: "Not Authorized"});
       } else {
         next();
       }

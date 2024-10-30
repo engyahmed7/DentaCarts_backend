@@ -5,7 +5,9 @@ export { get, update, destroy };
 
 async function get(req, res) {
   const { email } = req.decodedUser;
+  console.log(email);
   const user = await UserModel.findOne({ email: email });
+  console.log(user);
   if (!user) {
     return res.status(404).json({ message: "User Not Found" });
   }
@@ -16,7 +18,7 @@ async function get(req, res) {
     birthDate: user.birthDate,
   };
 
-  return res.send(userInfo);
+  return res.send(user);
 }
 
 async function update(req, res) {
