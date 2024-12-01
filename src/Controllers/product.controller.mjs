@@ -27,6 +27,7 @@ const createProduct = catchAsync(async (req, res) => {
   const newProduct = new Product({ ...req.body, image: images });
 
   const savedProduct = await newProduct.save();
+  console.log(savedProduct);
   return res
     .status(201)
     .json({ message: "Product added successfully", savedProduct });

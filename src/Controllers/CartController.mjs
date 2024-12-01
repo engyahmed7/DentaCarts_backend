@@ -10,12 +10,16 @@ const client = redis.createClient({
 client.on("error", (error) => {
   console.log(`Redis client error:`, error);
 });
-// await client.connect();
+await client.connect();
 
 async function add(req, res) {
   const { email } = req.decodedUser;
   const { productId } = req.body;
+  console.log(email, productId);
+  if (!productId) throw new ExpressError("Invalid request", 400);
+
   const qty = parseInt(req.body.qty);
+
   if (!productId || !qty) throw new ExpressError("Invalid request", 400);
   const product = await Product.findById(productId);
   if (!product) {
