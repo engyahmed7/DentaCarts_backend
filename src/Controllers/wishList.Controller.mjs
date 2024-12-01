@@ -3,14 +3,14 @@ import Product from "../Model/Product.mjs";
 export { add, get, update, destroy, getFromRedis };
 import redis from "redis";
 
-// const client = redis.createClient({
-//   url: process.env.REDIS_URL || "redis://localhost:6379",
-// });
-// try {
-//   await client.connect();
-// } catch (error) {
-//   throw new ExpressError(error, 500);
-// }
+const client = redis.createClient({
+  url: process.env.REDIS_URL || "redis://localhost:6379",
+});
+try {
+  await client.connect();
+} catch (error) {
+  throw new ExpressError(error, 500);
+}
 
 async function add(req, res) {
   const { email } = req.decodedUser;
