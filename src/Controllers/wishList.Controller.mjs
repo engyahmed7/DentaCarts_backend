@@ -1,6 +1,6 @@
 import { ExpressError } from "../utils/ExpressError.mjs";
 import Product from "../Model/Product.mjs";
-export { add, get, update, destroy, getFromRedis };
+export {add, get, update, destroy, getFromRedis, toggleFavorite };
 import redis from "redis";
 
 const client = redis.createClient({
@@ -10,6 +10,61 @@ try {
   await client.connect();
 } catch (error) {
   throw new ExpressError(error, 500);
+}
+
+async function toggleFavorite(req, res) {
+  const { email } = req.decodedUser;
+  const { productId } = req.body;
+  console.log("toggle", email, productId);
+
+  if (!productId) throw new ExpressError("Invalid request", 400);
+
+  const product = await Product.findById(productId);
+  if (!product) {
+    throw new ExpressError("Invalid Product ID", 404);
+  }
+
+  const productToWishList = {
+    productId: product._id,
+    name: product.title,
+    price: product.price,
+    img: product.image,
+    stock: product.stock,
+  };
+
+  let wishList = await getFromRedis(email);
+
+  try {
+    if (!wishList) {
+      await storeToRedis(email, [productToWishList]);
+      return res.status(200).json({
+        message: "Added to favorites",
+        wishList: [productToWishList],
+      });
+    }
+
+    const existingItemIndex = wishList.findIndex(
+      (el) => el.productId == productToWishList.productId
+    );
+
+    if (existingItemIndex === -1) {
+      wishList.push(productToWishList);
+      await storeToRedis(email, wishList);
+      return res.status(200).json({
+        message: "Added to favorites",
+        wishList,
+      });
+    } else {
+      wishList.splice(existingItemIndex, 1);
+      await storeToRedis(email, wishList);
+      return res.status(204).json({
+        message: "Removed from favorites",
+        wishList,
+      });
+    }
+  } catch (error) {
+    throw new ExpressError(error.message, error.statusCode);
+  }
 }
 
 async function add(req, res) {

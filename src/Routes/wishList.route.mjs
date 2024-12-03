@@ -11,3 +11,5 @@ router
   .get(catchAsync(wishList.get))
   .put(catchAsync(wishList.update))
   .delete(catchAsync(wishList.destroy));
+
+router.route("/toggle").post(catchAsync(wishList.toggleFavorite));
