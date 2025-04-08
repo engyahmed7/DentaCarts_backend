@@ -22,13 +22,14 @@ const signup_post = async (req, res) => {
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { email, username, password, gender } = req.body;
+  const { email, username, password, gender, role = "user" } = req.body;
 
   const user = await UserModel.create({
     email,
     username,
     password,
     gender,
+    role,
     verified: false,
   });
 
@@ -51,7 +52,7 @@ const signup_post = async (req, res) => {
   );
   return res.status(200).json({
     token: token,
-    msg: `${username} Registerd Successfully , A Verification Email Sent to your inbox `,
+    msg: `${username} Registered Successfully, A Verification Email Sent to your inbox`,
   });
 };
 

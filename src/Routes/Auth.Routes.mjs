@@ -12,4 +12,7 @@ AuthRoutes.post("/login", validateLogin, Auth_Con.login_post);
 
 AuthRoutes.get("/verify/:id/:uuid", Auth_Con.verify);
 
+AuthRoutes.get("/test", function (req, res) {
+  res.send("Hello, world!");
+});
 export { AuthRoutes };
