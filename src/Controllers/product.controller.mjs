@@ -39,10 +39,10 @@ const getAllProducts = catchAsync(async (req, res) => {
   const sortBy = parseInt(req.query.sortBy) || 0;
   const searchQuery = req.query.search || "";
   const category = req.params.category || "";
-  
+
   let filters = {};
   let searchFilter = {};
-  
+
   if (category && category !== "categories") {
     filters["category"] = category;
   }
@@ -211,6 +211,17 @@ const getRating = catchAsync(async (req, res) => {
   return res.status(200).json({ rating });
 });
 
+const searchProducts = catchAsync(async (req, res) => {
+  const { query } = req.query;
+  const products = await Product.find({
+    $or: [
+      { title: { $regex: query, $options: "i" } },
+      { description: { $regex: query, $options: "i" } },
+    ],
+  });
+  return res.status(200).json(products);
+});
+
 export {
   createProduct,
   getAllProducts,
@@ -222,4 +233,5 @@ export {
   addRating,
   getRating,
   getCategories,
+  searchProducts,
 };
