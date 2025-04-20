@@ -13,6 +13,8 @@ UserRoutes.get("/profile", requireAuth, UserController.profile);
 // UserRoutes.get('/verify/:id/:uuid', UserController.verify);
 
 // Admin
+// add test route get
+
 
 UserRoutes.get("/:id", requireAuth, isOwner, UserController.getUser);
 

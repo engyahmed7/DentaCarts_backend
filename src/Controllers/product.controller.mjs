@@ -39,11 +39,11 @@ const getAllProducts = catchAsync(async (req, res) => {
   const sortBy = parseInt(req.query.sortBy) || 0;
   const searchQuery = req.query.search || "";
   const category = req.params.category || "";
-
+  
   let filters = {};
   let searchFilter = {};
-
-  if (category) {
+  
+  if (category && category !== "categories") {
     filters["category"] = category;
   }
 
@@ -90,6 +90,11 @@ const getAllProducts = catchAsync(async (req, res) => {
     totalProducts: count,
     products,
   });
+});
+
+const getCategories = catchAsync(async (_, res) => {
+  const categories = await Product.distinct("category");
+  return res.status(200).json(categories);
 });
 
 const getProductById = catchAsync(async (req, res) => {
@@ -216,4 +221,5 @@ export {
   countProducts,
   addRating,
   getRating,
+  getCategories,
 };

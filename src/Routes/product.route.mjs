@@ -17,10 +17,13 @@ import {
   countProducts,
   addRating,
   getRating,
+  getCategories,
 } from "../Controllers/product.controller.mjs";
 import { AddProductValidation } from "../Validation/products.mjs";
 
 const upload = multerFn(validationType.image);
+
+router.get("/categories", getCategories);
 
 router.get("/count", isAdmin, countProducts);
 
