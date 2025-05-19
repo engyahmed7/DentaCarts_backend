@@ -182,10 +182,15 @@ const addRating = catchAsync(async (req, res) => {
     return res.status(400).json({ message: "Rating must be between 1 and 5" });
   }
   product.rating[rating] += 1;
+
+  if (product.totalRating.user.includes(req.decodedUser.id)) {
+    return res.status(400).json({ message: "User already rated this product" });
+  }
+
   product.totalRating.user.push(req.decodedUser.id);
   product.totalRating.rating = rating;
   product.save();
-  return res
+  return ress
     .status(200)
     .json({ message: "rating added successfully", product: product });
 });

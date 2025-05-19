@@ -1,28 +1,18 @@
 import { ExpressError } from "../utils/ExpressError.mjs";
 import Product from "../Model/Product.mjs";
-export {add, get, update, destroy, getFromRedis, toggleFavorite };
-import redis from "redis";
+import Wishlist from "../Model/Wishlist.mjs";
 
-const client = redis.createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
-});
-try {
-  await client.connect();
-} catch (error) {
-  throw new ExpressError(error, 500);
-}
+export { add, get, update, destroy, toggleFavorite };
 
 async function toggleFavorite(req, res) {
   const { email } = req.decodedUser;
   const { productId } = req.body;
-  console.log("toggle", email, productId);
-
   if (!productId) throw new ExpressError("Invalid request", 400);
 
   const product = await Product.findById(productId);
-  if (!product) {
-    throw new ExpressError("Invalid Product ID", 404);
-  }
+  if (!product) throw new ExpressError("Invalid Product ID", 404);
+
+  let wishlist = await Wishlist.findOne({ email });
 
   const productToWishList = {
     productId: product._id,
@@ -32,38 +22,33 @@ async function toggleFavorite(req, res) {
     stock: product.stock,
   };
 
-  let wishList = await getFromRedis(email);
+  if (!wishlist) {
+    wishlist = new Wishlist({
+      email,
+      items: [productToWishList],
+    });
+    await wishlist.save();
+    return res
+      .status(200)
+      .json({ message: "Added to favorites", wishList: wishlist.items });
+  }
 
-  try {
-    if (!wishList) {
-      await storeToRedis(email, [productToWishList]);
-      return res.status(200).json({
-        message: "Added to favorites",
-        wishList: [productToWishList],
-      });
-    }
+  const existingIndex = wishlist.items.findIndex((item) =>
+    item.productId.equals(product._id)
+  );
 
-    const existingItemIndex = wishList.findIndex(
-      (el) => el.productId == productToWishList.productId
-    );
-
-    if (existingItemIndex === -1) {
-      wishList.push(productToWishList);
-      await storeToRedis(email, wishList);
-      return res.status(200).json({
-        message: "Added to favorites",
-        wishList,
-      });
-    } else {
-      wishList.splice(existingItemIndex, 1);
-      await storeToRedis(email, wishList);
-      return res.status(204).json({
-        message: "Removed from favorites",
-        wishList,
-      });
-    }
-  } catch (error) {
-    throw new ExpressError(error.message, error.statusCode);
+  if (existingIndex === -1) {
+    wishlist.items.push(productToWishList);
+    await wishlist.save();
+    return res
+      .status(200)
+      .json({ message: "Added to favorites", wishList: wishlist.items });
+  } else {
+    wishlist.items.splice(existingIndex, 1);
+    await wishlist.save();
+    return res
+      .status(200)
+      .json({ message: "Removed from favorites", wishList: wishlist.items });
   }
 }
 
@@ -71,10 +56,12 @@ async function add(req, res) {
   const { email } = req.decodedUser;
   const { productId } = req.body;
   if (!productId) throw new ExpressError("Invalid request", 400);
+
   const product = await Product.findById(productId);
-  if (!product) {
-    throw new ExpressError("Invalid Product ID", 404);
-  }
+  if (!product) throw new ExpressError("Invalid Product ID", 404);
+
+  let wishlist = await Wishlist.findOne({ email });
+
   const productToWishList = {
     productId: product._id,
     name: product.title,
@@ -83,65 +70,56 @@ async function add(req, res) {
     stock: product.stock,
   };
 
-  let wishList = await getFromRedis(email);
-  try {
-    if (!wishList) {
-      await storeToRedis(email, [productToWishList]);
-      wishList = [productToWishList];
-    } else {
-      const item = wishList.find(
-        (el) => el.productId == productToWishList.productId
-      );
-      if (!item) {
-        wishList.push(productToWishList);
-        await storeToRedis(email, wishList);
-      }
+  if (!wishlist) {
+    wishlist = new Wishlist({
+      email,
+      items: [productToWishList],
+    });
+  } else {
+    const exists = wishlist.items.some((item) =>
+      item.productId.equals(product._id)
+    );
+    if (!exists) {
+      wishlist.items.push(productToWishList);
     }
-  } catch (error) {
-    throw new ExpressError(error.message, error.statusCode);
   }
+
+  await wishlist.save();
+
   if (!req.body.reorder) {
-    return res.json(wishList);
+    return res.json(wishlist.items);
   }
 }
+
 async function get(req, res) {
   const { email } = req.decodedUser;
-  const wishList = await getFromRedis(email);
-  return res.json(wishList);
+  const wishlist = await Wishlist.findOne({ email });
+  return res.json(wishlist ? wishlist.items : []);
 }
+
 async function update(req, res) {
   const { email } = req.decodedUser;
-  const wishList = req.body;
-  if (!wishList) throw new ExpressError("unAuthorized", 401);
-  try {
-    await storeToRedis(email, wishList);
-  } catch (error) {
-    throw new ExpressError("redis storing error", 500);
+  const items = req.body;
+
+  if (!items) throw new ExpressError("Unauthorized", 401);
+
+  let wishlist = await Wishlist.findOne({ email });
+  if (!wishlist) {
+    wishlist = new Wishlist({ email, items });
+  } else {
+    wishlist.items = items;
   }
-  return res.json(wishList);
+
+  await wishlist.save();
+  return res.json(wishlist.items);
 }
+
 async function destroy(req, res) {
   const { email } = req.decodedUser;
   try {
-    await deleteFromRedis(email);
-  } catch {
-    throw new ExpressError("redis deletion error", 500);
+    await Wishlist.findOneAndDelete({ email });
+    return res.json("WishList deleted successfully");
+  } catch (error) {
+    throw new ExpressError("Wishlist deletion error", 500);
   }
-  return res.json("WishList deleted successfully");
-}
-
-async function getFromRedis(email) {
-  const key = `wishlist:${email}`;
-  const wishList = JSON.parse(await client.get(key));
-  return wishList;
-}
-
-async function storeToRedis(email, wishList) {
-  const key = `wishlist:${email}`;
-  await client.set(key, JSON.stringify(wishList));
-}
-
-async function deleteFromRedis(email) {
-  const key = `wishlist:${email}`;
-  await client.del(key);
 }

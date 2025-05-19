@@ -1,78 +1,73 @@
 import { ExpressError } from "../utils/ExpressError.mjs";
 import Product from "../Model/Product.mjs";
-export { add, get, update, destroy, getFromRedis, deleteFromRedis };
-import redis from "redis";
+import Cart from "../Model/Cart.mjs"; // <-- import new model
 
-const client = redis.createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
-});
-client.on("error", (error) => {
-  console.log(`Redis client error:`, error);
-});
-await client.connect();
-
+export { add, get, update, destroy };
 
 async function add(req, res) {
   const { email } = req.decodedUser;
-  const { productId } = req.body;
-  console.log(email, productId);
-  if (!productId) throw new ExpressError("Invalid request", 400);
-
-  const qty = parseInt(req.body.qty);
+  const { productId, qty: qtyRaw } = req.body;
+  const qty = parseInt(qtyRaw);
 
   if (!productId || !qty) throw new ExpressError("Invalid request", 400);
+
   const product = await Product.findById(productId);
-  if (!product) {
-    throw new ExpressError("Invalid Product ID", 404);
-  }
+  if (!product) throw new ExpressError("Invalid Product ID", 404);
   if (product.stock < 1) throw new ExpressError("Out of stock", 400);
-  const stock = product.stock;
+
+  if (qty > product.stock) throw new ExpressError("Not enough stock", 400);
+
   const productToCart = {
     productId: product._id,
     name: product.title,
     price: product.price,
     qty: qty,
     img: product.image[0],
-    stock: stock,
+    stock: product.stock,
   };
 
-  let cart = await getFromRedis(email);
-  try {
-    if (!cart) {
-      if (productToCart.qty > productToCart.stock)
-        throw new ExpressError("Not enough stock", 400);
-      await storeToRedis(email, [productToCart]);
-      cart = [productToCart];
-    } else {
-      const item = cart.find((el) => el.productId == productToCart.productId);
-      if (item) {
-        item.qty += qty;
-        item.stock = stock;
-        if (item.qty > item.stock)
-          throw new ExpressError("Not enough stock", 400);
-      } else {
-        cart.push(productToCart);
-      }
-      await storeToRedis(email, cart);
-    }
-  } catch (error) {
-    throw new ExpressError(error.message, error.statusCode);
-  }
-  if (!req.body.reorder) {
-    return res.send(cart);
+  let cart = await Cart.findOne({ email });
+
+  if (!cart) {
+    // Create new cart doc
+    cart = new Cart({
+      email,
+      items: [productToCart],
+    });
   } else {
-    return cart;
+    // Cart exists: check if product exists
+    const itemIndex = cart.items.findIndex((el) =>
+      el.productId.equals(productToCart.productId)
+    );
+    if (itemIndex > -1) {
+      // Update qty and stock
+      cart.items[itemIndex].qty += qty;
+      cart.items[itemIndex].stock = product.stock;
+
+      if (cart.items[itemIndex].qty > cart.items[itemIndex].stock)
+        throw new ExpressError("Not enough stock", 400);
+    } else {
+      // Add new product item
+      cart.items.push(productToCart);
+    }
+  }
+
+  await cart.save();
+
+  if (!req.body.reorder) {
+    return res.send(cart.items);
+  } else {
+    return cart.items;
   }
 }
 
-
-
-
-
 async function get(req, res) {
   const { email } = req.decodedUser;
-  const cart = await getFromRedis(email);
-  return res.send(cart);
+
+  let cart = await Cart.findOne({ email });
+  if (!cart) cart = { items: [] };
+
+  return res.send(cart.items);
 }
 
 async function update(req, res) {
@@ -81,30 +76,26 @@ async function update(req, res) {
 
   if (!productId || qty == null) throw new ExpressError("Invalid request", 400);
 
-  let cart = await getFromRedis(email);
-  const item = cart.find((el) => el.productId == productId);
+  let cart = await Cart.findOne({ email });
+  if (!cart) throw new ExpressError("Cart not found", 404);
 
-  if (!item) throw new ExpressError("Product not found in cart", 404);
+  const itemIndex = cart.items.findIndex((el) =>
+    el.productId.equals(productId)
+  );
+  if (itemIndex === -1)
+    throw new ExpressError("Product not found in cart", 404);
 
-  // Update quantity
-  if (qty > item.stock) {
+  if (qty > cart.items[itemIndex].stock)
     throw new ExpressError("Not enough stock", 400);
+
+  if (qty <= 0) {
+    cart.items.splice(itemIndex, 1); // remove item
+  } else {
+    cart.items[itemIndex].qty = qty; // update qty
   }
 
-  item.qty = qty;
-
-  // Remove item if qty is zero or less
-  if (item.qty <= 0) {
-    cart = cart.filter((product) => product.productId !== productId);
-  }
-
-  try {
-    await storeToRedis(email, cart);
-  } catch (error) {
-    throw new ExpressError("Error storing cart in Redis", 500);
-  }
-
-  return res.send(cart);
+  await cart.save();
+  return res.send(cart.items);
 }
 
 async function destroy(req, res) {
@@ -113,29 +104,11 @@ async function destroy(req, res) {
 
   if (!productId) throw new ExpressError("Invalid request", 400);
 
-  let cart = await getFromRedis(email);
+  let cart = await Cart.findOne({ email });
+  if (!cart) throw new ExpressError("Cart not found", 404);
 
-  // Find and remove the product from the cart
-  cart = cart.filter((product) => product.productId !== productId);
+  cart.items = cart.items.filter((item) => !item.productId.equals(productId));
+  await cart.save();
 
-  try {
-    await storeToRedis(email, cart);
-  } catch (error) {
-    throw new ExpressError("Error deleting product from Redis", 500);
-  }
-
-  return res.send(cart);
-}
-
-async function getFromRedis(email) {
-  const cart = JSON.parse(await client.get(email));
-  return cart;
-}
-
-async function storeToRedis(email, cart) {
-  await client.set(email, JSON.stringify(cart));
-}
-
-async function deleteFromRedis(email) {
-  await client.del(email);
+  return res.send(cart.items);
 }
